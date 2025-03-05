@@ -8,6 +8,9 @@
         "preview": "vite preview"
     },
     "dependencies": {
+		"pikaday": "^1.8.2",
+        "sigma": "^3.0.1",
+        "graphology": "^0.26.0"
     },
     "devDependencies": {
         "vite": "^6.0.7"

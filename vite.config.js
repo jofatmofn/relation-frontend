@@ -8,9 +8,14 @@ export default defineConfig({
         manifest: true,
 		rollupOptions: {
 			input: {
-				mainjs: './src/main.js',
+				mainjs: './src/js/reltree.js',
 				mainhtml: 'index.html'
 			}
+		},
+		minify: false,	// minify and terserOptions are just for debug
+		terserOptions: {
+			compress: false,
+			mangle: false,
 		}
     }
 });
