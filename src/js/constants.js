@@ -17,7 +17,7 @@ export const FLAG_ATTRIBUTE_PRIVACY_RESTRICTION_PRIVATE_ONLY = "PR";
 export const FLAG_ATTRIBUTE_PRIVACY_RESTRICTION_INDIVIDUAL_CHOICE = "BR";
 
 export const DEFAULT_COLOR = "rgb(1,179,255)";
-export const HIGHLIGHT_COLOR = "rgb(179,179,179)";
+export const HIGHLIGHT_COLOR = "rgb(179,1,1)";
 
 export const NEW_ENTITY_ID = "-1";
 export const SEARCH_ENTITY_ID = "-2";

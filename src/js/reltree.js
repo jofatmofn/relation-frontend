@@ -2,7 +2,7 @@ var domainValueVOList, isAppReadOnly, highlightedEntity, domainValueVOMap;
 var paSelectElement, raSpSelectElement, raPcSelectElement, paDomainValueVOList, raDomainValueVOList, isPersonNode;
 var action, selectElementMap, doubleClick, paSearchXtraOptions;
 var allPersonsSelectElement, malePersonsSelectElement, femalePersonsSelectElement;
-var translator, s;
+var translator, s, enterEdgeColor;
 
 import Pikaday from 'pikaday';
 import { Graph } from 'graphology';
@@ -79,46 +79,74 @@ async function drawGraph() {
 	startProjectId = urlParams.get('startProjectId');
 	const graph = new Graph();
 	const container = document.getElementById("graph-container");
+	// For COLORs https://borderleft.com/toolbox/hex/
 	s = new Sigma(graph, container, {
 			minEdgeSize: 0.5,
 			maxEdgeSize: 2,
+			renderEdgeLabels: true,
+			enableEdgeEvents: true,
 			enableEdgeHovering: true,
-			edgeHoverColor: 'edge',
-			defaultEdgeHoverColor: '#000',
 			edgeHoverSizeRatio: 1,
 			edgeHoverExtremities: true
 		});
 	/* https://github.com/jacomyal/sigma.js/issues/910 */
 	s.on('enterNode', function(e) {
-		s.updateSettings({doubleClickZoomingRatio: 1});
+		s.setSettings({doubleClickZoomingRatio: 1});
 	});
 
 	s.on('leaveNode', function(e) {
-		s.updateSettings({doubleClickZoomingRatio: 2});
+		s.setSettings({doubleClickZoomingRatio: 2});
 	});
 	
+	s.on("enterEdge", (eEObj) => {
+		var enterEdge;
+		if ("event" in eEObj) {
+			enterEdge = s.graph._edges.get(eEObj.edge);
+		} else {
+			enterEdge = eEObj;
+		}
+		enterEdgeColor = enterEdge.attributes.color;
+		enterEdge.attributes.color= "rgb(179,179,179)";
+		s.refresh();
+	});
+	s.on("leaveEdge", (lEObj) => {
+		if ("event" in lEObj) {
+			s.graph._edges.get(lEObj.edge).attributes.color = enterEdgeColor;
+		} else {
+			lEObj.attributes.color = enterEdgeColor;
+		}
+		s.refresh();
+	});
+  
 	doubleClick = 0; // https://github.com/jacomyal/sigma.js/issues/506
 						// To avoid double click also firing single click.
 						// However, this is causing some delays!
 	
-	s.on('clickNode', (node) => {
+	s.on('clickNode', (cNObj) => {
 		window.setTimeout(function () {
 			if(doubleClick) {
 				doubleClick--;
 				return;
 			}
-			editEntityAttributes('clickNode', node);
+			var nodeKey;
+			if ('event' in cNObj) {
+				nodeKey = cNObj.node;
+			} else {
+				nodeKey = cNObj.key;
+			}
+			editEntityAttributes('clickNode', nodeKey);
 		}, s.settings.doubleClickTimeout + 100);
 	});
 	
-	s.on('clickEdge', (edge) => {
-		editEntityAttributes('clickEdge', edge);
+	s.on('clickEdge', (cEObj) => {
+		editEntityAttributes('clickEdge', cEObj.edge);
 	});
 	
 	s.on('doubleClickNode', (dCNObj) => {
 		doubleClick = 2;
 		if (dCNObj.node != constants.NEW_ENTITY_ID && dCNObj.node != constants.SEARCH_ENTITY_ID) {
 			s.graph.clear();
+			s.setSettings({ doubleClickZoomingRatio: 1 });
 			callBackendAndPopulateGraph(dCNObj.node);
 			s.refresh();
 		}
@@ -256,28 +284,34 @@ async function retrieveAppStartValues() {
 	
 }
 
-async function editEntityAttributes(eventType, item) {
+async function editEntityAttributes(eventType, itemKey) {
 	var attributeValueVOList, rightBarElement, valueElement, attributeValueBlockElement, actionButtonElement, addButtonElement;
 	var person1Node, person2Node, retrieveRelationAttributesResponseVO,  person1GenderDVId, person2GenderDVId, person1ForPerson2SelectElement,  person2ForPerson2SelectElement;
 	var retrievePersonAttributesResponseVO, photoImageElement;
 	var person1AsPerRelationId, relationGroup, isEditEnabled;
 	
-	if (highlightedEntity != undefined) {
+	if (highlightedEntity != undefined && highlightedEntity.attributes != undefined) {
 		highlightedEntity.attributes.color = constants.DEFAULT_COLOR;
 	}
 	
 	attributeValueVOList = [];
 	action = constants.ACTION_SAVE;
 	clearSidebar();
+	highlightedEntity = (eventType == "clickNode" ? s.graph._nodes.get(itemKey) : s.graph._edges.get(itemKey));
+	if (highlightedEntity.attributes == undefined) {
+		highlightedEntity.attributes = {};
+	}
+	if (highlightedEntity.attributes.label == undefined) {
+		highlightedEntity.attributes.label = "Unlabelled"; 
+	}
+	console.log(eventType, highlightedEntity.attributes.label);
 	if (eventType == "clickNode") {
 		isPersonNode = true;
-		highlightedEntity = item;
-		console.log(eventType, item.label);
-		if (item.key == constants.SEARCH_ENTITY_ID) {
+		if (highlightedEntity.key == constants.SEARCH_ENTITY_ID) {
 			action = constants.ACTION_SEARCH;
 		}
-		if (item.key > 0) {
-			retrievePersonAttributesResponseVO = await invokeService("basic/retrievePersonAttributes", item.key);
+		if (highlightedEntity.key > 0) {
+			retrievePersonAttributesResponseVO = await invokeService("basic/retrievePersonAttributes", highlightedEntity.key);
 			highlightedEntity.attributes.label = retrievePersonAttributesResponseVO.label;
 			photoImageElement = document.getElementById("sidebarphotoImg");
 			document.getElementById("sidebarphotoInput").value = '';
@@ -299,10 +333,8 @@ async function editEntityAttributes(eventType, item) {
 	}
 	else {
 		isPersonNode = false;
-		highlightedEntity = item;
-		console.log(eventType, item.label);
-		if (item.key > 0) {
-			retrieveRelationAttributesResponseVO = await invokeService("basic/retrieveRelationAttributes", item.key);
+		if (highlightedEntity.key > 0) {
+			retrieveRelationAttributesResponseVO = await invokeService("basic/retrieveRelationAttributes", highlightedEntity.key);
 			attributeValueVOList = retrieveRelationAttributesResponseVO.attributeValueVOList;
 			person1GenderDVId = retrieveRelationAttributesResponseVO.person1GenderDVId;
 			person2GenderDVId = retrieveRelationAttributesResponseVO.person2GenderDVId;
@@ -310,7 +342,7 @@ async function editEntityAttributes(eventType, item) {
 			relationGroup = retrieveRelationAttributesResponseVO.relationGroup;
 		}
 		else {
-			if (!item.key.startsWith("S")) {
+			if (!highlightedEntity.key.startsWith("S")) {
 				alert("Debug: Scenario when edge id equals 0!");
 			}
 			return;
@@ -319,6 +351,7 @@ async function editEntityAttributes(eventType, item) {
 	}
 	
 	highlightedEntity.attributes.color = constants.HIGHLIGHT_COLOR;
+	if (!isPersonNode) enterEdgeColor = highlightedEntity.attributes.color;
 	
 	rightBarElement = document.getElementById("sidebarbody");
 	/* Current attribute values from back-end */
@@ -455,10 +488,10 @@ async function editEntityAttributes(eventType, item) {
 				document.getElementById("sidebartitle").textContent = translator.getStr("labelDetails") + ": " + (highlightedEntity.key == constants.NEW_ENTITY_ID ? translator.getStr("labelNewPerson") : highlightedEntity.attributes.label);
 			}
 			else {
-				person1Node = s.graph._nodes.get(highlightedEntity.attributes.source);
-				person2Node = s.graph._nodes.get(highlightedEntity.attributes.target);
+				person1Node = highlightedEntity.source;
+				person2Node = highlightedEntity.target;
 				document.getElementById("sidebartitle").textContent = translator.getStr("labelDetailsOfRelation") + ": " +
-						(person1Node.id == person1AsPerRelationId ? (person1Node.label + " " + translator.getStr("labelAnd") + " " + person2Node.label) : (person2Node.label + " " + translator.getStr("labelAnd") + " " + person1Node.label));
+						(person1Node.key == person1AsPerRelationId ? (person1Node.attributes.label + " " + translator.getStr("labelAnd") + " " + person2Node.attributes.label) : (person2Node.attributes.label + " " + translator.getStr("labelAnd") + " " + person1Node.attributes.label));
 			}
 			break;
 		case constants.ACTION_SEARCH:
@@ -655,6 +688,7 @@ async function editEntityAttributes(eventType, item) {
 					});
 					highlightedEntity = s.graph._nodes.get(saveAttributesResponseVO.entityId);
 					highlightedEntity.attributes.color = constants.HIGHLIGHT_COLOR;
+					if (!isPersonNode) enterEdgeColor = highlightedEntity.attributes.color;
 				}
 				highlightedEntity.attributes.label = (isPersonNode ? attributeVsValueListMap.get(constants.PERSON_ATTRIBUTE_DV_ID_FIRST_NAME)[0].attributeValueVO.attributeValue :
 					domainValueVOMap.get(parseInt(attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON1_FOR_PERSON2)[0].attributeValueVO.attributeValue)).value + "-" + domainValueVOMap.get(parseInt(attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON2_FOR_PERSON1)[0].attributeValueVO.attributeValue)).value);
@@ -731,15 +765,15 @@ async function editEntityAttributes(eventType, item) {
 						searchedPersonId = document.querySelector('input[type="radio"][name="searchresultradio"]:checked').value;
 						searchResultsWindowElement.style.display = "none";
 						s.graph.dropNode(constants.SEARCH_ENTITY_ID);
-						if (s.graph._nodes.get(searchedPersonId) != null) {
+						if (s.graph.hasNode(searchedPersonId)) {
 							alert("Person exists already");
 							s.emit('clickNode', s.graph._nodes.get(searchedPersonId));
 						}
 						else {
 							personIdsList = [];
-							for (let node of s.graph.nodeEntries()) {
-								if (node.id != constants.NEW_ENTITY_ID) {
-									personIdsList.push(node.id);
+							for (let nodeKey of s.graph.nodes()) {	// TODO: To filterNodes
+								if (nodeKey != constants.NEW_ENTITY_ID) {
+									personIdsList.push(nodeKey);
 								}
 							}
 							s.graph.addNode(searchedPersonId, {
@@ -748,10 +782,10 @@ async function editEntityAttributes(eventType, item) {
 								y: Math.random() * 100
 							});
 							for (let relationVO of await invokeService("basic/retrieveRelationsBetween", {end1PersonId : searchedPersonId, end2PersonIdsList : personIdsList})) {
-								s.graph.addEdge({
-									id: relationVO.id,
-									source: relationVO.source,
-									target: relationVO.target,
+								s.graph.addEdgeWithKey(
+									relationVO.id,
+									relationVO.source,
+									relationVO.target, {
 									label: relationVO.label,
 									size: relationVO.size
 								});
@@ -949,34 +983,31 @@ function createAttributeBlock(attributeValueBlockElement, attributeValueVO, acti
 
 function addPerson(personId = constants.NEW_ENTITY_ID) {
 	var addNode;
-	addNode = s.graph._nodes.get(personId);
-	if (!addNode) {
+	if (s.graph.hasNode(personId)) {
+		addNode = s.graph._nodes.get(personId);
+	} else {
 		addNode = s.graph.addNode(personId, {
 			size: 5.0,
 			x: Math.random() * 100,
 			y: Math.random() * 100,
 		});
-		addNode = s.graph._nodes.get(personId);
-	}
-	if (personId == constants.NEW_ENTITY_ID) {
-		addNode.label = translator.getStr('labelYetToBeAdded');
+		if (personId == constants.NEW_ENTITY_ID) {
+			addNode.label = translator.getStr('labelYetToBeAdded');
+		}
 	}
 	s.emit('clickNode', addNode);
 }
 
 function searchPerson() {
-	var searchNode;
-	searchNode = s.graph._nodes.get(constants.SEARCH_ENTITY_ID);
-	if (!searchNode) {
+	if (!s.graph.hasNode(constants.SEARCH_ENTITY_ID)) {
 		s.graph.addNode(constants.SEARCH_ENTITY_ID, {
 			size: 5.0,
 			x: Math.random() * 100,
 			y: Math.random() * 100,
 			label: translator.getStr('labelYetToBeSearched')
 		});
-		searchNode = s.graph._nodes.get(constants.SEARCH_ENTITY_ID);
 	}
-	s.emit('clickNode', searchNode);
+	s.emit('clickNode', s.graph._nodes.get(constants.SEARCH_ENTITY_ID));
 }
 
 function clearGraph() {
@@ -1054,14 +1085,14 @@ function relatePersons() {
 
 async function saveRelation(relatedPersonsVO) {
 	relationVO = await invokeService("basic/saveRelation", relatedPersonsVO);
-	s.graph.addEdge({
-		id: relationVO.id,
-		source: relationVO.source,
-		target: relationVO.target,
+	s.graph.addEdgeWithKey(
+		relationVO.id,
+		relationVO.source,
+		relationVO.target, {
 		label: relationVO.label,
 		size: relationVO.size
 	});
-	s.renderers[0].dispatchEvent('clickEdge', {edge: s.graph.edges(relationVO.id)});
+	s.emit('clickEdge', s.graph._edges.get(relationVO.id));
 }
 
 async function switchRelGrp(clickedRadioElement) {
@@ -1198,7 +1229,7 @@ async function createPersonDropdown()
 	femalePersonsSelectElement = allPersonsSelectElement.cloneNode(true);
 	
 	allPersonIds = [];
-	for (let nodeKey of s.graph.nodes()) {
+	for (let nodeKey of s.graph.nodes()) {	// TODO: To filterNodes
 		if (nodeKey != constants.NEW_ENTITY_ID && nodeKey != constants.SEARCH_ENTITY_ID) {
 			allPersonIds.push(nodeKey);
 		}
@@ -1210,7 +1241,7 @@ async function createPersonDropdown()
 	allGenders = await invokeService("basic/retrieveGendersOfPersons", allPersonIds);
 	
 	ind = -1;
-	for (let nodeEntry of s.graph.nodeEntries()) {
+	for (let nodeEntry of s.graph.nodeEntries()) {	// TODO: To forEachNode
 		if (nodeEntry.node != constants.NEW_ENTITY_ID && nodeEntry.node != constants.SEARCH_ENTITY_ID) {
 			optionElement = document.createElement("option");
 			optionElement.setAttribute("value", nodeEntry.node);
@@ -1235,7 +1266,7 @@ function makeDropdownOptional(ddElement) {
 }
 
 function printGraph() {
-	s.toSVG({download: true, filename: 'familytree.svg', labels: true, size: 1000});
+	s.toSVG({download: true, filename: 'familytree.svg', labels: true, size: 1000});	// @sigma/export-image downloadAsImage
 	// s.renderers[0].snapshot({download: true});
 }
 
@@ -1348,7 +1379,7 @@ function blockSpecialCharOnPaste(e, regEx) {
 }
 
 function nodeToFocus() {
-	s.camera.goTo({x:0, y:0, ratio:1});
+	s.getCamera().animatedReset();
 }
 
 async function uploadPrData() {
