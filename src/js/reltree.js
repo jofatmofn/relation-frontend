@@ -5,6 +5,8 @@ var allPersonsSelectElement, malePersonsSelectElement, femalePersonsSelectElemen
 var translator, s, enterEdgeColor;
 
 import Pikaday from 'pikaday';
+import EdgeCurveProgram from "@sigma/edge-curve";
+import { downloadAsImage } from "@sigma/export-image";
 import { Graph } from 'graphology';
 import { Sigma } from 'sigma';
 import { invokeService, fileToByteArray, Language } from './relationUtils.js';
@@ -87,7 +89,10 @@ async function drawGraph() {
 			enableEdgeEvents: true,
 			enableEdgeHovering: true,
 			edgeHoverSizeRatio: 1,
-			edgeHoverExtremities: true
+			edgeHoverExtremities: true,
+			edgeProgramClasses: {
+				curve: EdgeCurveProgram,
+			}
 		});
 	/* https://github.com/jacomyal/sigma.js/issues/910 */
 	s.on('enterNode', function(e) {
@@ -98,73 +103,52 @@ async function drawGraph() {
 		s.setSettings({doubleClickZoomingRatio: 2});
 	});
 	
-	s.on("enterEdge", (eEObj) => {
-		var enterEdge;
-		if ("event" in eEObj) {
-			enterEdge = s.graph._edges.get(eEObj.edge);
-		} else {
-			enterEdge = eEObj;
-		}
+	s.on("enterEdge", function(e) {
+		const enterEdge = s.graph._edges.get(e.edge);
 		enterEdgeColor = enterEdge.attributes.color;
-		enterEdge.attributes.color= "rgb(179,179,179)";
+		enterEdge.attributes.color = constants.EDGE_HOVER_COLOR;
 		s.refresh();
 	});
-	s.on("leaveEdge", (lEObj) => {
-		if ("event" in lEObj) {
-			s.graph._edges.get(lEObj.edge).attributes.color = enterEdgeColor;
-		} else {
-			lEObj.attributes.color = enterEdgeColor;
-		}
+	s.on("leaveEdge", function(e) {
+		s.graph._edges.get(e.edge).attributes.color = enterEdgeColor;
 		s.refresh();
 	});
   
 	doubleClick = 0; // https://github.com/jacomyal/sigma.js/issues/506
 						// To avoid double click also firing single click.
 						// However, this is causing some delays!
-	
-	s.on('clickNode', (cNObj) => {
+	// Set doubleClick to zero, whenever programmatically invoking s.emit('clickNode'
+	s.on('clickNode', function(e) {
 		window.setTimeout(function () {
 			if(doubleClick) {
 				doubleClick--;
 				return;
 			}
-			var nodeKey;
-			if ('event' in cNObj) {
-				nodeKey = cNObj.node;
-			} else {
-				nodeKey = cNObj.key;
-			}
-			editEntityAttributes('clickNode', nodeKey);
+			editEntityAttributes('clickNode', e.node);
 		}, s.settings.doubleClickTimeout + 100);
 	});
 	
-	s.on('clickEdge', (cEObj) => {
-		editEntityAttributes('clickEdge', cEObj.edge);
+	s.on('clickEdge', function(e) {
+		editEntityAttributes('clickEdge', e.edge);
 	});
 	
-	s.on('doubleClickNode', (dCNObj) => {
+	s.on('doubleClickNode', function(e) {
 		doubleClick = 2;
-		if (dCNObj.node != constants.NEW_ENTITY_ID && dCNObj.node != constants.SEARCH_ENTITY_ID) {
+		if (e.node != constants.NEW_ENTITY_ID && e.node != constants.SEARCH_ENTITY_ID) {
 			s.graph.clear();
 			s.setSettings({ doubleClickZoomingRatio: 1 });
-			callBackendAndPopulateGraph(dCNObj.node);
+			callBackendAndPopulateGraph(e.node);
 			s.refresh();
 		}
 		clearSidebar();
 	});
 
-	// *** sigma.layout.noverlap ***
-	var config = {
-		nodeMargin: 3.0,
-		scaleNodes: 1.3
-	};
-	
 	if (startProjectId != null) {
 		var projectVO;
 		
 		document.getElementById("personCount").innerText = "";
 		projectVO = await invokeService("projectuser/switchProject", startProjectId);
-		isAppReadOnly = projectVO.isAppReadOnly;
+		isAppReadOnly = projectVO.appReadOnly;
 		document.getElementById("project").value = startProjectId;
 		document.getElementById("personCount").innerText = projectVO.personCount;
 		if (startPersonId != null) {
@@ -606,8 +590,8 @@ async function editEntityAttributes(eventType, itemKey) {
 				}
 			}
 			if (!isPersonNode) {
-				relationPerson1ForPerson2 = attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON1_FOR_PERSON2)[0].attributeValueVO.attributeValue;
-				relationPerson2ForPerson1 = attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON2_FOR_PERSON1)[0].attributeValueVO.attributeValue;
+				relationPerson1ForPerson2 = attributeVsValueListMap.get(constants.RELATION_ATTRIBUTE_DV_ID_PERSON1_FOR_PERSON2)[0].attributeValueVO.attributeValue;
+				relationPerson2ForPerson1 = attributeVsValueListMap.get(constants.RELATION_ATTRIBUTE_DV_ID_PERSON2_FOR_PERSON1)[0].attributeValueVO.attributeValue;
 				attributeDomainValueVO = domainValueVOMap.get(parseInt(relationPerson1ForPerson2));
 				if (!constants.VALID_RELATIONS_JSON.includes(JSON.stringify([relationPerson1ForPerson2, relationPerson2ForPerson1]))) {
 					alert("Invalid pair of relations");
@@ -681,17 +665,17 @@ async function editEntityAttributes(eventType, itemKey) {
 					s.graph.dropNode(constants.NEW_ENTITY_ID);
 					s.graph.addNode(saveAttributesResponseVO.entityId, {
 						size: 5.0,
-						x: Math.random() * 100,
-						y: Math.random() * 100,
+						x: Math.random() * 10,
+						y: Math.random() * 10,
 						dX: 0,
 						dY: 0
 					});
-					highlightedEntity = s.graph._nodes.get(saveAttributesResponseVO.entityId);
+					highlightedEntity = s.graph._nodes.get(""+saveAttributesResponseVO.entityId);
 					highlightedEntity.attributes.color = constants.HIGHLIGHT_COLOR;
 					if (!isPersonNode) enterEdgeColor = highlightedEntity.attributes.color;
 				}
 				highlightedEntity.attributes.label = (isPersonNode ? attributeVsValueListMap.get(constants.PERSON_ATTRIBUTE_DV_ID_FIRST_NAME)[0].attributeValueVO.attributeValue :
-					domainValueVOMap.get(parseInt(attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON1_FOR_PERSON2)[0].attributeValueVO.attributeValue)).value + "-" + domainValueVOMap.get(parseInt(attributeVsValueListMap.get(RELATION_ATTRIBUTE_DV_ID_PERSON2_FOR_PERSON1)[0].attributeValueVO.attributeValue)).value);
+					domainValueVOMap.get(parseInt(attributeVsValueListMap.get(constants.RELATION_ATTRIBUTE_DV_ID_PERSON1_FOR_PERSON2)[0].attributeValueVO.attributeValue)).value + "-" + domainValueVOMap.get(parseInt(attributeVsValueListMap.get(constants.RELATION_ATTRIBUTE_DV_ID_PERSON2_FOR_PERSON1)[0].attributeValueVO.attributeValue)).value);
 				s.refresh();
 				break;
 			case constants.ACTION_SEARCH:
@@ -767,7 +751,8 @@ async function editEntityAttributes(eventType, itemKey) {
 						s.graph.dropNode(constants.SEARCH_ENTITY_ID);
 						if (s.graph.hasNode(searchedPersonId)) {
 							alert("Person exists already");
-							s.emit('clickNode', s.graph._nodes.get(searchedPersonId));
+							doubleClick = 0;
+							s.emit('clickNode', eventPayload('node', searchedPersonId));
 						}
 						else {
 							personIdsList = [];
@@ -778,19 +763,20 @@ async function editEntityAttributes(eventType, itemKey) {
 							}
 							s.graph.addNode(searchedPersonId, {
 								size: 5.0,
-								x: Math.random() * 100,
-								y: Math.random() * 100
+								x: Math.random() * 10,
+								y: Math.random() * 10
 							});
 							for (let relationVO of await invokeService("basic/retrieveRelationsBetween", {end1PersonId : searchedPersonId, end2PersonIdsList : personIdsList})) {
 								s.graph.addEdgeWithKey(
-									relationVO.id,
+									relationVO.key,
 									relationVO.source,
 									relationVO.target, {
 									label: relationVO.label,
 									size: relationVO.size
 								});
 							}
-							s.emit('clickNode', s.graph._nodes.get(searchedPersonId));
+							doubleClick = 0;
+							s.emit('clickNode', eventPayload('node', searchedPersonId));
 						}
 					}
 				}
@@ -982,32 +968,31 @@ function createAttributeBlock(attributeValueBlockElement, attributeValueVO, acti
 }
 
 function addPerson(personId = constants.NEW_ENTITY_ID) {
-	var addNode;
-	if (s.graph.hasNode(personId)) {
-		addNode = s.graph._nodes.get(personId);
-	} else {
-		addNode = s.graph.addNode(personId, {
+	if (!s.graph.hasNode(personId)) {
+		s.graph.addNode(personId, {
 			size: 5.0,
-			x: Math.random() * 100,
-			y: Math.random() * 100,
+			x: Math.random() * 10,
+			y: Math.random() * 10,
 		});
 		if (personId == constants.NEW_ENTITY_ID) {
-			addNode.label = translator.getStr('labelYetToBeAdded');
+			s.graph._nodes.get(personId).attributes.label = translator.getStr('labelYetToBeAdded');
 		}
 	}
-	s.emit('clickNode', addNode);
+	doubleClick = 0;
+	s.emit('clickNode', eventPayload('node', personId));
 }
 
 function searchPerson() {
 	if (!s.graph.hasNode(constants.SEARCH_ENTITY_ID)) {
 		s.graph.addNode(constants.SEARCH_ENTITY_ID, {
 			size: 5.0,
-			x: Math.random() * 100,
-			y: Math.random() * 100,
+			x: Math.random() * 10,
+			y: Math.random() * 10,
 			label: translator.getStr('labelYetToBeSearched')
 		});
 	}
-	s.emit('clickNode', s.graph._nodes.get(constants.SEARCH_ENTITY_ID));
+	doubleClick = 0;
+	s.emit('clickNode', eventPayload('node', constants.SEARCH_ENTITY_ID));
 }
 
 function clearGraph() {
@@ -1086,13 +1071,13 @@ function relatePersons() {
 async function saveRelation(relatedPersonsVO) {
 	relationVO = await invokeService("basic/saveRelation", relatedPersonsVO);
 	s.graph.addEdgeWithKey(
-		relationVO.id,
+		relationVO.key,
 		relationVO.source,
 		relationVO.target, {
 		label: relationVO.label,
 		size: relationVO.size
 	});
-	s.emit('clickEdge', s.graph._edges.get(relationVO.id));
+	s.emit('clickEdge', eventPayload('edge', relationVO.key));
 }
 
 async function switchRelGrp(clickedRadioElement) {
@@ -1266,8 +1251,15 @@ function makeDropdownOptional(ddElement) {
 }
 
 function printGraph() {
-	s.toSVG({download: true, filename: 'familytree.svg', labels: true, size: 1000});	// @sigma/export-image downloadAsImage
-	// s.renderers[0].snapshot({download: true});
+	downloadAsImage(s, {
+		layers: null,	// null = all = ["edges", "nodes", "edgeLabels", "labels"]
+		format: "png",	// or jpeg
+		fileName: "familytree",
+		backgroundColor: "#ffffff",
+		width: null,
+		height: null,	// TODO: width and height to come from user inputs
+		cameraState: null
+	});
 }
 
 function enDisableDepth(clickedRadioElement) {
@@ -1284,7 +1276,7 @@ async function switchProject() {
 	
 	document.getElementById("personCount").innerText = "";
 	projectVO = await invokeService("projectuser/switchProject", document.getElementById("project").value);
-	isAppReadOnly = projectVO.isAppReadOnly;
+	isAppReadOnly = projectVO.appReadOnly;
 	document.getElementById("personCount").innerText = projectVO.personCount;
 	enableDisableRWFunctions();
 	alert("Project switched successfully");
@@ -1467,4 +1459,28 @@ function sourceOfData() {
 		return "error";
 	}
 	return +dsource;
+}
+
+function eventPayload(itemType, itemKey) {
+	var payload;
+	payload = {
+		preventSigmaDefault: function () {
+			this.event.sigmaDefaultPrevented = true;
+		},
+		event: {
+			x: null,
+			y: null,
+			original: null,
+			sigmaDefaultPrevented: false,
+			preventSigmaDefault: function () {
+				this.sigmaDefaultPrevented = true;
+			},
+		}
+	}
+	if (typeof itemKey == "number") {
+		payload[itemType] = ""+itemKey;
+	} else {
+		payload[itemType] = itemKey;
+	}
+	return payload;
 }
