@@ -1021,6 +1021,8 @@ function relatePersons() {
 					<label for="PC">${translator.getStr("labelParentChild")}</label>
 					<input type="radio" id="Sp" name="relGrp" value="Sp" onclick="switchRelGrp(this);"/>
 					<label for="Sp">${translator.getStr("labelSpouse")}</label>
+					<input type="radio" id="Ot" name="relGrp" value="Ot" onclick="switchRelGrp(this);"/>
+					<label for="Sp">${translator.getStr("labelOther")}</label>
 					<div id="relatedPersons"></div>`;
 	parentChildRadioElement = document.getElementById("PC");
 	switchRelGrp(parentChildRadioElement);
@@ -1028,10 +1030,15 @@ function relatePersons() {
 	actionButtonElement = document.getElementById("actionbutton");
 	actionButtonElement.onclick = async function() {
 		var person1Id, person2Id, relationId, fatherPersonElement, motherPersonElement, childPersonElement, husbandPersonElement, wifePersonElement;
+		var otherRelationTypeDvId, rPerson1Id, rVia1DvId, rPerson2Id, rVia2DvId, otherRelationTypeElement, rPerson1Element, rVia1Element, rPerson2Element, rVia2Element;
 		var selectedRelGrp, dsource;
 		
 		selectedRelGrp = document.querySelector('input[name="relGrp"]:checked')?.value;
 		
+		dsource = sourceOfData();
+		if (dsource == "error") {
+			return;
+		}
 		if (selectedRelGrp == "PC") {
 			fatherPersonElement = document.getElementById("fatherPerson");
 			motherPersonElement = document.getElementById("motherPerson");
@@ -1047,23 +1054,35 @@ function relatePersons() {
 				alert("One of Father, Mother is required");
 				return;
 			}
-			dsource = sourceOfData();
-			if (dsource == "error") {
-				return;
-			}
 			if (motherPersonId != -1) {
-				relationId = await saveRelation({person1Id: motherPersonId, person2Id: childPersonId, person1ForPerson2: constants.RELATION_NAME_MOTHER_DV_ID, sourceId: dsource});
+				relationId = await saveRelation({person1Id: motherPersonId, person2Id: childPersonId, person1ForPerson2: '' + constants.RELATION_NAME_MOTHER_DV_ID, sourceId: dsource});
 			}
 			// Beware: The above and below saveRelation are NOT part of a single TRANSACTION
 			if (fatherPersonId != -1) {
-				relationId = await saveRelation({person1Id: fatherPersonId, person2Id: childPersonId, person1ForPerson2: constants.RELATION_NAME_FATHER_DV_ID, sourceId: dsource});
+				relationId = await saveRelation({person1Id: fatherPersonId, person2Id: childPersonId, person1ForPerson2: '' + constants.RELATION_NAME_FATHER_DV_ID, sourceId: dsource});
 			}
-		} else {
+		} else if (selectedRelGrp == "Sp") {
 			husbandPersonElement = document.getElementById("husbandPerson");
 			wifePersonElement = document.getElementById("wifePerson");
 			husbandPersonId = parseInt(husbandPersonElement.options[husbandPersonElement.selectedIndex].value);
 			wifePersonId = parseInt(wifePersonElement.options[wifePersonElement.selectedIndex].value);
-			relationId = await saveRelation({person1Id: husbandPersonId, person2Id: wifePersonId, person1ForPerson2: '' + constants.RELATION_NAME_HUSBAND_DV_ID});
+			relationId = await saveRelation({person1Id: husbandPersonId, person2Id: wifePersonId, person1ForPerson2: '' + constants.RELATION_NAME_HUSBAND_DV_ID, sourceId: dsource});
+		} else {
+			otherRelationTypeElement = document.getElementById("otherrelationtype");
+			rPerson1Element = document.getElementById("rperson1");
+			rVia1Element = document.getElementById("rvia1");
+			rPerson2Element = document.getElementById("rperson2");
+			rVia2Element = document.getElementById("rvia2");
+			otherRelationTypeDvId = parseInt(otherRelationTypeElement.options[otherRelationTypeElement.selectedIndex].value);
+			rPerson1Id = parseInt(rPerson1Element.options[rPerson1Element.selectedIndex].value);
+			rVia1DvId = parseInt(rVia1Element.options[rVia1Element.selectedIndex].value);
+			rPerson2Id = parseInt(rPerson2Element.options[rPerson2Element.selectedIndex].value);
+			rVia2DvId = parseInt(rVia2Element.options[rVia2Element.selectedIndex].value);
+			await invokeService("basic/saveOtherRelation", {otherRelationTypeDvId: otherRelationTypeDvId, person1Id: rPerson1Id, otherRelationVia1DvId: rVia1DvId, person2Id: rPerson2Id, otherRelationVia2DvId: rVia2DvId, sourceId: dsource});
+			alert("Multiple Persons/Relations ADDED.");
+			s.graph.clear();
+			s.graph.import(await invokeService("algo/retrieveRelationPath", {person1Id: rPerson1Id, person2Id: rPerson2Id, excludeRelationIdCsv: "", excludePersonIdCsv: ""}, timeout_ms=50000));
+			s.refresh();
 		}
 	}
 }
@@ -1109,7 +1128,7 @@ async function switchRelGrp(clickedRadioElement) {
 		relatedPersonsElement.appendChild(childPersonElement);
 		relatedPersonsElement.appendChild(document.createElement("br"));
 	}
-	else {
+	else if (clickedRadioElement.value == "Sp") {
 		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelHusband") + ": "));
 		husbandPersonElement = malePersonsSelectElement.cloneNode(true);
 		husbandPersonElement.setAttribute("id", "husbandPerson");
@@ -1121,6 +1140,37 @@ async function switchRelGrp(clickedRadioElement) {
 		wifePersonElement.setAttribute("id", "wifePerson");
 		relatedPersonsElement.appendChild(wifePersonElement);
 		relatedPersonsElement.appendChild(document.createElement("br"));
+	} else {
+		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelRelationType") + ": "));
+		otherRelationTypeElement = selectElementMap.get(constants.CATEGORY_OTHER_RELATION_TYPE).cloneNode(true);
+		otherRelationTypeElement.setAttribute("id", "otherrelationtype");
+		relatedPersonsElement.appendChild(otherRelationTypeElement);
+		relatedPersonsElement.appendChild(document.createElement("br"));
+
+		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelPerson") + "1: "));
+		rperson1Element = allPersonsSelectElement.cloneNode(true);
+		rperson1Element.setAttribute("id", "rperson1");
+		relatedPersonsElement.appendChild(rperson1Element);
+		relatedPersonsElement.appendChild(document.createElement("br"));
+		
+		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelRelationVia") + ": "));
+		rvia1Element = selectElementMap.get(constants.CATEGORY_OTHER_RELATION_VIA).cloneNode(true);
+		rvia1Element.setAttribute("id", "rvia1");
+		relatedPersonsElement.appendChild(rvia1Element);
+		relatedPersonsElement.appendChild(document.createElement("br"));
+		
+		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelPerson") + "2: "));
+		rperson2Element = allPersonsSelectElement.cloneNode(true);
+		rperson2Element.setAttribute("id", "rperson2");
+		relatedPersonsElement.appendChild(rperson2Element);
+		relatedPersonsElement.appendChild(document.createElement("br"));
+		
+		relatedPersonsElement.appendChild(document.createTextNode(translator.getStr("labelRelationVia") + ": "));
+		rvia2Element = selectElementMap.get(constants.CATEGORY_OTHER_RELATION_VIA).cloneNode(true);
+		rvia2Element.setAttribute("id", "rvia2");
+		relatedPersonsElement.appendChild(rvia2Element);
+		relatedPersonsElement.appendChild(document.createElement("br"));
+		
 	}
 }
 

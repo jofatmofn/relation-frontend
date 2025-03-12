@@ -3,6 +3,8 @@ export const ENTITY_TYPE_RELATION = 2;
 
 export const CATEGORY_RELATION_NAME = "RelName";
 export const CATEGORY_RELATION_SUB_TYPE = "RelSubType";
+export const CATEGORY_OTHER_RELATION_TYPE = "OtherRelType";
+export const CATEGORY_OTHER_RELATION_VIA = "OtherRelVia";
 export const CATEGORY_PERSON_ATTRIBUTE = "PersAttribute";
 export const CATEGORY_ADDITIONAL_PERSON_ATTRIBUTE = "AddlPersAttribute";
 export const CATEGORY_RELATION_ATTRIBUTE = "RelAttribute";
@@ -95,7 +97,10 @@ languageLabelMap.set("eng", {
 	labelSearch: "Search",
 	labelIsLenient: "Lenient",
 	labelParentChild: "Parent-Child",
-	labelSpouse: "Spouse"
+	labelSpouse: "Spouse",
+	labelOther: "Other",
+	labelRelationType: "Relation Type",
+	labelRelationVia: "Relation Via"
 });
 
 languageLabelMap.set("tam", {
@@ -138,5 +143,8 @@ languageLabelMap.set("tam", {
 	labelSearch: "தேடு",
 	labelIsLenient: "துல்லியமில்லா",
 	labelParentChild: "பெற்றோர்-பிள்ளை",
-	labelSpouse: "வாழ்க்கைத் துணை"
+	labelSpouse: "வாழ்க்கைத் துணை",
+	labelOther: "மற்றவை",
+	labelRelationType: "உறவு வகை",
+	labelRelationVia: "உறவு வழி"
 });
