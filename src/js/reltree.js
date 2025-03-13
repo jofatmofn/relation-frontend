@@ -225,7 +225,7 @@ async function retrieveAppStartValues() {
 		optionElement.setAttribute("value", domainValueVO.id);
 		optionElement.appendChild(document.createTextNode(domainValueVO.value));
 		if (domainValueVO.category == constants.CATEGORY_PERSON_ATTRIBUTE) {
-			if (domainValueVO.isInputAsAttribute) {
+			if (domainValueVO.attributeInUi == constants.FLAG_ATTRIBUTE_UI_INPUT) {
 				paSelectElement.appendChild(optionElement);
 				paDomainValueVOList.push(domainValueVO);
 			}
@@ -233,7 +233,7 @@ async function retrieveAppStartValues() {
 			paSearchXtraOptions.push(optionElement);
 		}
 		else if (domainValueVO.category == constants.CATEGORY_RELATION_ATTRIBUTE) {
-			if (domainValueVO.isInputAsAttribute) {
+			if (domainValueVO.attributeInUi == constants.FLAG_ATTRIBUTE_UI_INPUT) {
 				if (domainValueVO.relationGroup == null || domainValueVO.relationGroup == "" || domainValueVO.relationGroup == constants.RELATION_GROUP_SPOUSE) {
 					raSpSelectElement.appendChild(optionElement);
 				}
@@ -956,7 +956,10 @@ function createAttributeBlock(attributeValueBlockElement, attributeValueVO, acti
 		isPrivateElement.setAttribute("checked", "");
 	}
 	
-	if (!attributeDomainValueVO.isInputAsAttribute) {
+	if (attributeDomainValueVO.attributeInUi == constants.FLAG_ATTRIBUTE_UI_DISPLAY) {
+		if (deleteBlockImageElement != undefined) {
+			deleteBlockImageElement.onclick = null;
+		}
 		valueElement.setAttribute("disabled","");
 		isApproximateElement.setAttribute("disabled","");
 		if (attributeDomainValueVO.repetitionType != constants.FLAG_ATTRIBUTE_REPETITION_NOT_ALLOWED) {
